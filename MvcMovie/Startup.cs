@@ -40,11 +40,70 @@ namespace MvcMovie
             });
 
             // Add authentication services
-            services.AddAuthentication(options => {
+            if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Production")
+                services.AddAuthentication(options => {
                 options.DefaultAuthenticateScheme = CookieAuthenticationDefaults.AuthenticationScheme;
                 options.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
                 options.DefaultChallengeScheme = CookieAuthenticationDefaults.AuthenticationScheme;
             })
+            .AddCookie()
+            .AddOpenIdConnect("Auth0", options => {
+                // Set the authority to your Auth0 domain
+                options.Authority = $"https://{Environment.GetEnvironmentVariable("AuthDomain")}";
+
+                // Configure the Auth0 Client ID and Client Secret
+                options.ClientId = Environment.GetEnvironmentVariable("AuthClientID");
+                options.ClientSecret = Environment.GetEnvironmentVariable("AuthClientSecret");
+
+                // Set response type to code
+                options.ResponseType = "code";
+
+                // Configure the scope
+                options.Scope.Clear();
+                options.Scope.Add("openid");
+
+                // Set the callback path, so Auth0 will call back to http://localhost:3000/callback
+                // Also ensure that you have added the URL as an Allowed Callback URL in your Auth0 dashboard
+                options.CallbackPath = new PathString("/callback");
+
+                // Configure the Claims Issuer to be Auth0
+                options.ClaimsIssuer = "Auth0";
+
+                // Saves tokens to the AuthenticationProperties
+                options.SaveTokens = true;
+
+                options.Events = new OpenIdConnectEvents
+                {
+                    // handle the logout redirection
+                    OnRedirectToIdentityProviderForSignOut = (context) =>
+                    {
+                        var logoutUri = $"https://{Environment.GetEnvironmentVariable("AuthDomain")}/v2/logout?client_id={Configuration["Auth0:ClientId"]}";
+
+                        var postLogoutUri = context.Properties.RedirectUri;
+                        if (!string.IsNullOrEmpty(postLogoutUri))
+                        {
+                            if (postLogoutUri.StartsWith("/"))
+                            {
+                                // transform to absolute
+                                var request = context.Request;
+                                postLogoutUri = request.Scheme + "://" + request.Host + request.PathBase + postLogoutUri;
+                            }
+                            logoutUri += $"&returnTo={ Uri.EscapeDataString(postLogoutUri)}";
+                        }
+
+                        context.Response.Redirect(logoutUri);
+                        context.HandleResponse();
+
+                        return Task.CompletedTask;
+                    }
+                };
+            });
+            else
+                services.AddAuthentication(options => {
+                    options.DefaultAuthenticateScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+                    options.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+                    options.DefaultChallengeScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+                })
             .AddCookie()
             .AddOpenIdConnect("Auth0", options => {
                 // Set the authority to your Auth0 domain
@@ -97,6 +156,7 @@ namespace MvcMovie
                     }
                 };
             });
+
 
             // Add framework services.
             services.AddControllersWithViews();
