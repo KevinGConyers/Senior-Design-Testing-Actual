@@ -27,8 +27,17 @@ namespace MvcMovie
         {
             services.AddControllersWithViews();
 
-            services.AddDbContext<MvcMovieContext>(options =>
+            
+            // Use SQL Database if in Azure, otherwise, use SQLite
+            if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Production")
+                services.AddDbContext<MvcMovieContext>(options =>
+                        options.UseSqlServer(Configuration.GetConnectionString("MyDbConnection")));
+            else
+                services.AddDbContext<MvcMovieContext>(options =>
                     options.UseSqlServer(Configuration.GetConnectionString("MvcMovieContext")));
+
+            // Automatically perform database migration
+            services.BuildServiceProvider().GetService<MvcMovieContext>().Database.Migrate();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
